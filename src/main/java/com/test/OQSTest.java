@@ -14,23 +14,7 @@ public class OQSTest {
             String osName = System.getProperty("os.name").toLowerCase();
             String libPath;
             if (osName.contains("windows")) {
-                // 添加 DLL 目录到系统路径
-                String dllDir = System.getProperty("user.dir") + "\\lib\\windows";
-                try {
-                    System.setProperty("java.library.path", System.getProperty("java.library.path") + ";" + dllDir);
-                    // 使用反射清除 java.library.path 缓存
-                    java.lang.reflect.Field sysPathsField = ClassLoader.class.getDeclaredField("sys_paths");
-                    sysPathsField.setAccessible(true);
-                    sysPathsField.set(null, null);
-                } catch (Exception e) {
-                    System.err.println("Failed to add DLL directory to system path: " + e);
-                }
-                
-                // 加载 DLL
-                libPath = dllDir + "\\liboqs.dll";
-                System.out.println("Loading base oqs library: " + libPath);
-                System.load(libPath);
-                libPath = dllDir + "\\oqs-jni.dll";
+                libPath = System.getProperty("user.dir") + "/lib/windows/oqs-jni.dll";
             } else {
                 libPath = System.getProperty("user.dir") + "/lib/linux/liboqs-jni.so";
             }
@@ -93,24 +77,22 @@ public class OQSTest {
 
     private static void testSM2KeyExchange() {
         System.out.println("\n=== Testing SM2 Key Exchange ===");
-            try {
+        try {
             // 第一步：A初始化
             InitiatorKeyMaterial initiatorMaterial = SM2KeyExchange.initiatorInit();
             System.out.println("1. Initiator generated key pair and Ra");
 
             // 第二步：B响应
             ResponderKeyMaterial responderMaterial = SM2KeyExchange.responderResponse(
-                initiatorMaterial.publicKey, 
-                initiatorMaterial.Ra
-            );
+                    initiatorMaterial.publicKey,
+                    initiatorMaterial.Ra);
             System.out.println("2. Responder generated key pair, Rb and calculated shared key");
 
             // 第三步：A计算共享密钥
             byte[] initiatorSharedKey = SM2KeyExchange.initiatorFinal(
-                initiatorMaterial,
-                responderMaterial.publicKey,
-                responderMaterial.Rb
-            );
+                    initiatorMaterial,
+                    responderMaterial.publicKey,
+                    responderMaterial.Rb);
             System.out.println("3. Initiator calculated shared key");
 
             // 验证共享密钥是否匹配

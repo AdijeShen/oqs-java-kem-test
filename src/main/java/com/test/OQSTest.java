@@ -1,5 +1,9 @@
 package com.test;
 
+import org.openjdk.jmh.runner.Runner;
+import org.openjdk.jmh.runner.options.Options;
+import org.openjdk.jmh.runner.options.OptionsBuilder;
+import org.openjdk.jmh.runner.options.TimeValue;
 import org.openquantumsafe.*;
 
 import com.test.SM2KeyExchange.InitiatorKeyMaterial;
@@ -11,33 +15,42 @@ import com.test.HybridKeyExchange.ResponderSession;
 public class OQSTest {
     static {
         try {
-            String osName = System.getProperty("os.name").toLowerCase();
-            String libPath;
-            if (osName.contains("windows")) {
-                libPath = System.getProperty("user.dir") + "/lib/windows/oqs-jni.dll";
-            } else {
-                libPath = System.getProperty("user.dir") + "/lib/linux/liboqs-jni.so";
-            }
-            System.out.println("Loading native library: " + libPath);
-            System.load(libPath);
+            // Seems like it doesn't need to load the lib.
+            // String osName = System.getProperty("os.name").toLowerCase();
+            // String libPath;
+            // if (osName.contains("windows")) {
+            // libPath = System.getProperty("user.dir") + "/lib/windows/oqs-jni.dll";
+            // } else {
+            // libPath = System.getProperty("user.dir") + "/lib/linux/liboqs-jni.so";
+            // }
+            // System.out.println("Loading native library: " + libPath);
+            // System.load(libPath);
         } catch (UnsatisfiedLinkError e) {
             System.err.println("Native code library failed to load: " + e);
             System.exit(1);
         }
     }
 
-    public static void main(String[] args) {
-        // 测试量子安全KEM
-        testQuantumSafeKEM();
+    public static void main(String[] args) throws Exception {
+        // // 测试量子安全KEM
+        // testQuantumSafeKEM();
 
-        // 测试SM2密钥协商
-        testSM2KeyExchange();
+        // // 测试SM2密钥协商
+        // testSM2KeyExchange();
 
-        // 测试混合密钥协商
-        HybridKeyExchange.testHybridKeyExchange();
+        // // 测试混合密钥协商
+        // HybridKeyExchange.testHybridKeyExchange();
 
-        // 测试混合密钥协商并使用SM4加密通信
-        HybridKeyExchange.testHybridKeyExchangeThenSM4Encrypt();
+        // // 测试混合密钥协商并使用SM4加密通信
+        // HybridKeyExchange.testHybridKeyExchangeThenSM4Encrypt();
+
+        Options opt = new OptionsBuilder()
+                .include(HybridKeyExchangePerformanceTest.class.getSimpleName())
+                .forks(1)
+                .build();
+
+        new Runner(opt).run();
+
     }
 
     private static void testQuantumSafeKEM() {

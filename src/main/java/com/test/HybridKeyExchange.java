@@ -1,12 +1,12 @@
 package com.test;
 
+import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.openquantumsafe.*;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.security.Security;
 import java.util.Arrays;
 import java.util.Base64;
 
@@ -145,6 +145,16 @@ public class HybridKeyExchange {
              * - SM2公钥(sm2InitiatorMaterial.publicKey)
              * - SM2 Ra点(sm2InitiatorMaterial.Ra)
              */
+            System.out.println("\nNetwork transmission A -> B sizes:");
+            System.out.println("ML-KEM-768 public key size: " + kemClientPublicKey.length + " bytes");
+            System.out.println("SM2 public key size: " + 
+                ((ECPublicKeyParameters)sm2InitiatorMaterial.publicKey).getQ().getEncoded(true).length + " bytes");
+            System.out.println("SM2 Ra point size: " + 
+                sm2InitiatorMaterial.Ra.getEncoded(true).length + " bytes");
+            System.out.println("Total A->B transmission size: " + 
+                (kemClientPublicKey.length + 
+                ((ECPublicKeyParameters)sm2InitiatorMaterial.publicKey).getQ().getEncoded(true).length +
+                sm2InitiatorMaterial.Ra.getEncoded(true).length) + " bytes");
 
             // 第2步：响应方（B）处理
             // 处理ML-KEM-768
@@ -171,6 +181,16 @@ public class HybridKeyExchange {
              * - SM2公钥(sm2ResponderMaterial.publicKey)
              * - SM2 Rb点(sm2ResponderMaterial.Rb)
              */
+            System.out.println("\nNetwork transmission B -> A sizes:");
+            System.out.println("ML-KEM-768 ciphertext size: " + kemCiphertext.length + " bytes");
+            System.out.println("SM2 public key size: " + 
+                ((ECPublicKeyParameters)sm2ResponderMaterial.publicKey).getQ().getEncoded(true).length + " bytes");
+            System.out.println("SM2 Rb point size: " + 
+                sm2ResponderMaterial.Rb.getEncoded(true).length + " bytes");
+            System.out.println("Total B->A transmission size: " + 
+                (kemCiphertext.length + 
+                ((ECPublicKeyParameters)sm2ResponderMaterial.publicKey).getQ().getEncoded(true).length +
+                sm2ResponderMaterial.Rb.getEncoded(true).length) + " bytes");
 
             // 第3步：发起方（A）完成密钥协商
             // 处理ML-KEM-768
@@ -236,7 +256,7 @@ public class HybridKeyExchange {
     }
 
     // 合并ML-KEM-768和SM2的共享密钥
-    private static byte[] combineFinalKey(byte[] kemKey, byte[] sm2Key) {
+    public static byte[] combineFinalKey(byte[] kemKey, byte[] sm2Key) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             digest.update(kemKey);

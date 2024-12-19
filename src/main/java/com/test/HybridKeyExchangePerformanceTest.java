@@ -8,11 +8,16 @@ import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Measurement;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.TearDown;
 import org.openjdk.jmh.annotations.Threads;
 import org.openjdk.jmh.annotations.Warmup;
+import org.openjdk.jmh.annotations.TearDown;
+import org.openjdk.jmh.annotations.Level;
+
 import org.openquantumsafe.KeyEncapsulation;
 import org.openquantumsafe.Pair;
 
@@ -22,8 +27,14 @@ import com.test.HybridKeyExchange.ResponderSession;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
+@State(Scope.Benchmark)
 public class HybridKeyExchangePerformanceTest {
 
     @State(Scope.Thread)
@@ -41,18 +52,18 @@ public class HybridKeyExchangePerformanceTest {
         // SM2 specific state
         ECPublicKeyParameters sm2InitiatorPublicKey;
         ECPoint sm2InitiatorRa;
-        
+
         @Setup
         public void setup() {
             // ML-KEM setup
             kemClient = new KeyEncapsulation(kemName);
             kemServer = new KeyEncapsulation(kemName);
             kemClientPublicKey = kemClient.generate_keypair();
-            
+
             // Generate ciphertext for decap testing
             Pair<byte[], byte[]> serverPair = kemServer.encap_secret(kemClientPublicKey);
             kemCiphertext = serverPair.getLeft();
-            
+
             random = new SecureRandom();
             iv = new byte[16];
             random.nextBytes(iv);
@@ -121,49 +132,48 @@ public class HybridKeyExchangePerformanceTest {
         byte[] decryptedData = sm4Utils.decrypt(encryptedData, sm4Key, state.iv);
     }
 
-
     // ML-KEM Tests
-    
+
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+    @OutputTimeUnit(TimeUnit.SECONDS)
     public void mlKemEncapsulation(TestState state) {
         Pair<byte[], byte[]> serverPair = state.kemServer.encap_secret(state.kemClientPublicKey);
         byte[] kemCiphertext = serverPair.getLeft();
         byte[] kemSharedSecret = serverPair.getRight();
     }
-    
+
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+    @OutputTimeUnit(TimeUnit.SECONDS)
     public void mlKemDecapsulation(TestState state) {
         byte[] kemSharedSecret = state.kemClient.decap_secret(state.kemCiphertext);
     }
-    
+
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+    @OutputTimeUnit(TimeUnit.SECONDS)
     public void mlKemFullExchange(TestState state) {
         // Full ML-KEM exchange
         KeyEncapsulation kemClient = new KeyEncapsulation(state.kemName);
         byte[] clientPublicKey = kemClient.generate_keypair();
-        
+
         Pair<byte[], byte[]> serverPair = state.kemServer.encap_secret(clientPublicKey);
         byte[] ciphertext = serverPair.getLeft();
         byte[] serverSharedSecret = serverPair.getRight();
-        
+
         byte[] clientSharedSecret = kemClient.decap_secret(ciphertext);
     }
-    
+
     // SM2 Tests
-    
+
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     public void sm2InitiatorGeneration(TestState state) {
         SM2KeyExchange.InitiatorKeyMaterial initiatorMaterial = SM2KeyExchange.initiatorInit();
     }
-    
+
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
@@ -172,18 +182,18 @@ public class HybridKeyExchangePerformanceTest {
                 state.sm2InitiatorPublicKey,
                 state.sm2InitiatorRa);
     }
-    
+
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     public void sm2FullExchange(TestState state) {
         // Full SM2 key exchange
         SM2KeyExchange.InitiatorKeyMaterial initiatorMaterial = SM2KeyExchange.initiatorInit();
-        
+
         SM2KeyExchange.ResponderKeyMaterial responderMaterial = SM2KeyExchange.responderResponse(
                 initiatorMaterial.publicKey,
                 initiatorMaterial.Ra);
-        
+
         byte[] finalKey = SM2KeyExchange.initiatorFinal(
                 initiatorMaterial,
                 responderMaterial.publicKey,
@@ -233,7 +243,6 @@ public class HybridKeyExchangePerformanceTest {
         byte[] decryptedData = sm4Utils.decrypt(encryptedData, sm4Key, state.iv);
     }
 
-    // 并发测试
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.SECONDS)
@@ -242,4 +251,14 @@ public class HybridKeyExchangePerformanceTest {
         // 完整流程测试
         fullProcessTest(state);
     }
+
+    @Benchmark
+    @BenchmarkMode(Mode.Throughput)
+    @OutputTimeUnit(TimeUnit.SECONDS)
+    @Threads(10) // 可以调整并发线程数
+    public void concurrentMlKemTest(TestState state) throws Exception {
+        // 完整流程测试
+        mlKemFullExchange(state);
+    }
+
 }

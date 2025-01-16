@@ -40,71 +40,76 @@ import java.util.concurrent.atomic.AtomicInteger;
 // @Measurement(iterations = 5, time = 1)
 // @Fork(3)
 public class HybridKeyExchangePerformanceTest {
-    
+
     // 添加内存使用监控
     @State(Scope.Thread)
     public static class MemoryState {
         long beforeMemory;
         long afterMemory;
         Runtime runtime;
-        
+
         @Setup
         public void setup() {
             runtime = Runtime.getRuntime();
             System.gc();
             beforeMemory = runtime.totalMemory() - runtime.freeMemory();
         }
-        
+
         @TearDown
         public void tearDown() {
             System.gc();
             afterMemory = runtime.totalMemory() - runtime.freeMemory();
+            long memoryUsed = afterMemory - beforeMemory;
+            System.out.println("Memory used: " + memoryUsed / 1024 + " KB");
+            System.out.println("Total memory: " + runtime.totalMemory() / 1024 + " KB");
+            System.out.println("Free memory: " + runtime.freeMemory() / 1024 + " KB");
         }
     }
-    
+
     // 添加错误率统计
     @State(Scope.Benchmark)
     public static class ErrorState {
         AtomicInteger totalRequests = new AtomicInteger(0);
         AtomicInteger failedRequests = new AtomicInteger(0);
-        
+
         public void recordSuccess() {
             totalRequests.incrementAndGet();
         }
-        
+
         public void recordFailure() {
             totalRequests.incrementAndGet();
             failedRequests.incrementAndGet();
         }
     }
-    
-    // // 添加延迟分布测试
-    // @Benchmark
-    // @BenchmarkMode(Mode.SampleTime)
-    // @OutputTimeUnit(TimeUnit.SECONDS)
-    // public void latencyDistributionTest(TestState state, MemoryState mm_state) throws Exception {
-    //     fullProcessTest(state);
-    // }
-    
-    // // 添加大并发测试
-    // @Benchmark
-    // @Threads(100)
-    // public void highConcurrencyTest(TestState state, MemoryState mm_state, ErrorState errorState) {
-    //     try {
-    //         fullProcessTest(state);
-    //         errorState.recordSuccess();
-    //     } catch (Exception e) {
-    //         errorState.recordFailure();
-    //     }
-    // }
-    
-    // // 添加持续负载测试
-    // @Benchmark
-    // @BenchmarkMode(Mode.Throughput)
-    // @Measurement(iterations = 10, time = 60)
-    // public void sustainedLoadTest(TestState state, MemoryState mm_state) throws Exception {
-    //     fullProcessTest(state);
-    // }
+
+    // 添加延迟分布测试
+    @Benchmark
+    @BenchmarkMode(Mode.SampleTime)
+    @OutputTimeUnit(TimeUnit.SECONDS)
+    public void latencyDistributionTest(TestState state, MemoryState memoryState, ErrorState errorState)
+            throws Exception {
+        fullProcessTest(state,memoryState,errorState);
+    }
+
+    // 添加大并发测试
+    @Benchmark
+    @Threads(100)
+    public void highConcurrencyTest(TestState state, MemoryState memoryState, ErrorState errorState) {
+        try {
+            fullProcessTest(state, memoryState, errorState);
+            errorState.recordSuccess();
+        } catch (Exception e) {
+            errorState.recordFailure();
+        }
+    }
+
+    // 添加持续负载测试
+    @Benchmark
+    @BenchmarkMode(Mode.Throughput)
+    @Measurement(iterations = 10, time = 60)
+    public void sustainedLoadTest(TestState state, MemoryState memoryState, ErrorState errorState) throws Exception {
+        fullProcessTest(state, memoryState, errorState);
+    }
 
     @State(Scope.Thread)
     public static class TestState {
@@ -144,14 +149,14 @@ public class HybridKeyExchangePerformanceTest {
         }
     }
 
-    // 步骤1：初始化测试
+    // // 步骤1：初始化测试
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.SECONDS)
     @Fork(value = 1, warmups = 2)
     @Warmup(iterations = 1)
     @Measurement(iterations = 3)
-    public void initializationPhase(TestState state, MemoryState mm_state) {
+    public void initializationPhase(TestState state, MemoryState memoryState, ErrorState errorState) {
         KeyEncapsulation kemClient = new KeyEncapsulation(state.kemName);
         byte[] kemClientPublicKey = kemClient.generate_keypair();
         SM2KeyExchange.InitiatorKeyMaterial sm2InitiatorMaterial = SM2KeyExchange.initiatorInit();
@@ -164,7 +169,7 @@ public class HybridKeyExchangePerformanceTest {
     @Fork(value = 1, warmups = 2)
     @Warmup(iterations = 1)
     @Measurement(iterations = 3)
-    public void keyExchangePhase(TestState state, MemoryState mm_state) {
+    public void keyExchangePhase(TestState state, MemoryState memoryState, ErrorState errorState) {
         // 密钥交换逻辑
 
         // Initiator side
@@ -197,7 +202,8 @@ public class HybridKeyExchangePerformanceTest {
     @Fork(value = 1, warmups = 2)
     @Warmup(iterations = 1)
     @Measurement(iterations = 3)
-    public void encryptionDecryptionPhase(TestState state, MemoryState mm_state) throws Exception {
+    public void encryptionDecryptionPhase(TestState state, MemoryState memoryState, ErrorState errorState)
+            throws Exception {
         byte[] sharedKey = new byte[32]; // Simulate shared key
         byte[] sm4Key = Arrays.copyOf(sharedKey, 16);
 
@@ -210,14 +216,14 @@ public class HybridKeyExchangePerformanceTest {
         byte[] decryptedData = sm4Utils.decrypt(encryptedData, sm4Key, state.iv);
     }
 
-    // ML-KEM Tests
+    // // ML-KEM Tests
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.SECONDS)
     @Fork(value = 1, warmups = 2)
     @Warmup(iterations = 1)
     @Measurement(iterations = 3)
-    public void mlKemEncapsulation(TestState state, MemoryState mm_state) {
+    public void mlKemEncapsulation(TestState state, MemoryState memoryState, ErrorState errorState) {
         Pair<byte[], byte[]> serverPair = state.kemServer.encap_secret(state.kemClientPublicKey);
         byte[] kemCiphertext = serverPair.getLeft();
         byte[] kemSharedSecret = serverPair.getRight();
@@ -229,7 +235,7 @@ public class HybridKeyExchangePerformanceTest {
     @Fork(value = 1, warmups = 2)
     @Warmup(iterations = 1)
     @Measurement(iterations = 3)
-    public void mlKemDecapsulation(TestState state, MemoryState mm_state) {
+    public void mlKemDecapsulation(TestState state, MemoryState memoryState, ErrorState errorState) {
         byte[] kemSharedSecret = state.kemClient.decap_secret(state.kemCiphertext);
     }
 
@@ -239,7 +245,7 @@ public class HybridKeyExchangePerformanceTest {
     @Fork(value = 1, warmups = 2)
     @Warmup(iterations = 1)
     @Measurement(iterations = 3)
-    public void mlKemFullExchange(TestState state, MemoryState mm_state) {
+    public void mlKemFullExchange(TestState state, MemoryState memoryState, ErrorState errorState) {
         // Full ML-KEM exchange
         KeyEncapsulation kemClient = new KeyEncapsulation(state.kemName);
         byte[] clientPublicKey = kemClient.generate_keypair();
@@ -251,14 +257,14 @@ public class HybridKeyExchangePerformanceTest {
         byte[] clientSharedSecret = kemClient.decap_secret(ciphertext);
     }
 
-    // SM2 Tests
+    // // SM2 Tests
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.SECONDS)
     @Fork(value = 1, warmups = 2)
     @Warmup(iterations = 1)
     @Measurement(iterations = 3)
-    public void sm2InitiatorGeneration(TestState state, MemoryState mm_state) {
+    public void sm2InitiatorGeneration(TestState state, MemoryState memoryState, ErrorState errorState) {
         SM2KeyExchange.InitiatorKeyMaterial initiatorMaterial = SM2KeyExchange.initiatorInit();
     }
 
@@ -268,7 +274,7 @@ public class HybridKeyExchangePerformanceTest {
     @Fork(value = 1, warmups = 2)
     @Warmup(iterations = 1)
     @Measurement(iterations = 3)
-    public void sm2ResponderProcessing(TestState state, MemoryState mm_state) {
+    public void sm2ResponderProcessing(TestState state, MemoryState memoryState, ErrorState errorState) {
         SM2KeyExchange.ResponderKeyMaterial responderMaterial = SM2KeyExchange.responderResponse(
                 state.sm2InitiatorPublicKey,
                 state.sm2InitiatorRa);
@@ -280,7 +286,7 @@ public class HybridKeyExchangePerformanceTest {
     @Fork(value = 1, warmups = 2)
     @Warmup(iterations = 1)
     @Measurement(iterations = 3)
-    public void sm2FullExchange(TestState state, MemoryState mm_state) {
+    public void sm2FullExchange(TestState state, MemoryState memoryState, ErrorState errorState) {
         // Full SM2 key exchange
         SM2KeyExchange.InitiatorKeyMaterial initiatorMaterial = SM2KeyExchange.initiatorInit();
 
@@ -294,14 +300,14 @@ public class HybridKeyExchangePerformanceTest {
                 responderMaterial.Rb);
     }
 
-    // 完整流程测试
+    // // 完整流程测试
     @Benchmark
     @BenchmarkMode(Mode.Throughput)
     @OutputTimeUnit(TimeUnit.MILLISECONDS)
     @Fork(value = 1, warmups = 2)
     @Warmup(iterations = 1)
     @Measurement(iterations = 3)
-    public void fullProcessTest(TestState state, MemoryState mm_state) throws Exception {
+    public void fullProcessTest(TestState state, MemoryState memoryState, ErrorState errorState) throws Exception {
         // Initialization
         KeyEncapsulation kemClient = new KeyEncapsulation(state.kemName);
         byte[] kemClientPublicKey = kemClient.generate_keypair();
@@ -337,22 +343,22 @@ public class HybridKeyExchangePerformanceTest {
         byte[] decryptedData = sm4Utils.decrypt(encryptedData, sm4Key, state.iv);
     }
 
-    // @Benchmark
-    // @BenchmarkMode(Mode.Throughput)
-    // @OutputTimeUnit(TimeUnit.SECONDS)
-    // @Threads(10) // 可以调整并发线程数
-    // public void concurrentTest(TestState state, MemoryState mm_state) throws Exception {
-    //     // 完整流程测试
-    //     fullProcessTest(state);
-    // }
+    @Benchmark
+    @BenchmarkMode(Mode.Throughput)
+    @OutputTimeUnit(TimeUnit.SECONDS)
+    @Threads(10) // 可以调整并发线程数
+    public void concurrentTest(TestState state, MemoryState memoryState, ErrorState errorState) throws Exception {
+        // 完整流程测试
+        fullProcessTest(state, memoryState, errorState);
+    }
 
-    // @Benchmark
-    // @BenchmarkMode(Mode.Throughput)
-    // @OutputTimeUnit(TimeUnit.SECONDS)
-    // @Threads(10) // 可以调整并发线程数
-    // public void concurrentMlKemTest(TestState state, MemoryState mm_state) throws Exception {
-    //     // 完整流程测试
-    //     mlKemFullExchange(state);
-    // }
+    @Benchmark
+    @BenchmarkMode(Mode.Throughput)
+    @OutputTimeUnit(TimeUnit.SECONDS)
+    @Threads(10) // 可以调整并发线程数
+    public void concurrentMlKemTest(TestState state, MemoryState memoryState, ErrorState errorState) throws Exception {
+        // 完整流程测试
+        mlKemFullExchange(state, memoryState, errorState);
+    }
 
 }
